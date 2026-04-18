@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import tensorflow as tf
-
+import base64
 
 def get_gradcam_heatmap(model, img_array, class_idx=None):
     base_model = model.layers[0]
@@ -66,11 +66,34 @@ def detect_defect(model, img_array, class_names, threshold=0.4):
         pred_class_name = class_names[pred_class_idx]
         heatmap = get_gradcam_heatmap(model, img_array[np.newaxis, ...], pred_class_idx)
         bbox, defect_pct = heatmap_to_bbox(heatmap, img_array, threshold)
+
+        # Draw annotations on a copy of the image
+        annotated = (img_array * 255).astype(np.uint8).copy()
+        annotated = cv2.cvtColor(annotated, cv2.COLOR_RGB2BGR)
+
+        if bbox:
+            x, y, w, h = bbox
+            cv2.rectangle(annotated, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+        label = f"{pred_class_name} {confidence:.1f}%"
+        (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
+        label_x = bbox[0] if bbox else 10
+        label_y = bbox[1] - 10 if bbox and bbox[1] > 20 else 20
+        cv2.rectangle(annotated, (label_x, label_y - text_h - baseline),
+                      (label_x + text_w, label_y + baseline), (0, 255, 0), -1)
+        cv2.putText(annotated, label, (label_x, label_y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 2)
+
+        # Encode annotated image to base64
+        _, buffer = cv2.imencode('.jpg', annotated)
+        annotated_b64 = base64.b64encode(buffer).decode('utf-8')
+
         return {
             'class': pred_class_name,
             'confidence': round(float(confidence), 2),
             'defect_percentage': round(float(defect_pct), 2),
             'bbox': list(bbox) if bbox else None,
+            'annotated_image': annotated_b64,
         }
     except Exception as e:
         raise ValueError(f"Error in defect detection: {str(e)}")

@@ -93,22 +93,20 @@ async def predict_defect(file: UploadFile = File(...)):
             status_code=503,
             detail=f"Detection model is unavailable. {startup_error or 'Startup did not complete successfully.'}"
         )
-
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
-
     try:
-        # Read image bytes
+
+        # Read and Image.
         image_bytes = await file.read()
 
-        # Preprocess
+        # Preprocess the image.
         img_array = preprocess_image(image_bytes)
 
-        # Detect defect
+        # Run detection.
         result = detect_defect(model, img_array, class_names)
-
+        
         return JSONResponse(content=result)
-
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
